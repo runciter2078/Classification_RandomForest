@@ -1,22 +1,19 @@
 # SPY Random Forest Classifier
 
-This repository implements a Random Forest classifier in Python to predict positive entry days for the SPY stock index. The project provides two main scripts/notebooks for different stages of the machine learning workflow, as well as an integrated Python script for the full pipeline.
+This repository implements a Random Forest classifier in Python to predict positive entry days for the SPY stock index. The project provides two main Python scripts for different stages of the machine learning workflow.
 
 ## Repository Structure
 
-- **notebooks/** (if you prefer working interactively)
-  - `SPY_Random_Forest_clasificador.ipynb` – Notebook containing the complete pipeline for data loading, splitting, training, evaluation, and feature importance analysis.
-  - `Random_Forest_Hypertune.ipynb` – Notebook dedicated to hyperparameter tuning.
-- **src/** (scripts)
-  - `spy_random_forest_classifier.py` – Script implementing the full pipeline.
-  - `random_forest_hypertune.py` – Script focusing on hyperparameter tuning only.
+- **src/**
+  - `spy_random_forest_classifier.py` – Script implementing the full pipeline for data loading, splitting, hyperparameter tuning, model training, evaluation, and feature importance analysis.
+  - `random_forest_hypertune.py` – Script focusing solely on hyperparameter tuning.
 - `README.md` – This file.
 - `LICENSE` – The project license.
 
 ## Features
 
 - **Interactive Data Upload:**  
-  Designed for Google Colab, allowing users to easily upload a CSV dataset.
+  Designed for use in Google Colab, allowing users to easily upload a CSV dataset.
   
 - **Hyperparameter Tuning:**  
   Uses `RandomizedSearchCV` to explore various hyperparameter configurations for the Random Forest classifier.
@@ -57,17 +54,7 @@ This repository implements a Random Forest classifier in Python to predict posit
 
 ## Usage
 
-### In Google Colab
-
-1. Open one of the notebooks from the `notebooks/` folder:
-   - For hyperparameter tuning, open `Random_Forest_Hypertune.ipynb`.
-   - For the complete training and evaluation pipeline, open `SPY_Random_Forest_clasificador.ipynb`.
-2. Run the cells sequentially. When prompted, upload your CSV file (e.g., `SPYV3.csv` or `SPYV3-18VAR.csv`).
-3. Follow the instructions provided within the notebooks.
-
-### As Python Scripts
-
-#### Full Pipeline
+### Full Pipeline Script
 
 1. Place your CSV file in the project directory.
 2. Run the full pipeline script:
@@ -76,7 +63,7 @@ This repository implements a Random Forest classifier in Python to predict posit
    python src/spy_random_forest_classifier.py
    ```
 
-#### Hyperparameter Tuning Only
+### Hyperparameter Tuning Script
 
 1. Place your CSV file in the project directory.
 2. Run the hyperparameter tuning script:
@@ -94,7 +81,7 @@ This repository implements a Random Forest classifier in Python to predict posit
   The final model is evaluated using a classification report and a confusion matrix to provide detailed performance metrics.
 
 - **Branch Consolidation:**  
-  All content has been merged into the main branch to maintain a single coherent codebase.
+  All content has been merged into the main branch to maintain a single, coherent codebase.
 
 ## License
 
