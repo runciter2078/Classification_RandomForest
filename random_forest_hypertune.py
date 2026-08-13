@@ -1,131 +1,174 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Random Forest Hyperparameter Tuning for SPY Data
+SPY Random Forest — Hyperparameter Search
+==========================================
 
-This script is designed for use in Google Colab (or any environment that supports file upload).
-It allows the user to upload a CSV dataset, loads the dataset, splits it into training and testing sets,
-and performs hyperparameter tuning using RandomizedSearchCV for a Random Forest classifier.
-The script prints the top models along with their parameters.
+Standalone script dedicated exclusively to hyperparameter tuning of a
+Random Forest classifier for predicting positive entry days on SPY,
+optimizing precision with time-aware cross-validation.
 """
 
-import pandas as pd
-import numpy as np
-from google.colab import files
+from __future__ import annotations
+
+import argparse
 import io
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import RandomizedSearchCV
+import json
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+import pandas as pd
 from scipy.stats import randint as sp_randint
-from sklearn.metrics import precision_score, make_scorer
-import warnings
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import make_scorer, precision_score
+from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
 
-warnings.filterwarnings('ignore')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("rf_hypertune")
 
+FEATURE_COLUMNS = [
+    "1", "31", "42", "46", "47", "48", "60", "68", "76", "77",
+    "93", "171", "173", "191", "221", "225", "237", "FECHA.month",
+]
+TARGET_COLUMN = "CLASIFICADOR"
+USE_COLUMNS = [TARGET_COLUMN] + FEATURE_COLUMNS
+RANDOM_STATE = 15
 
-def upload_data():
-    """
-    Upload a CSV file using Google Colab.
-    Returns the filename and an io.StringIO object.
-    """
-    uploaded = files.upload()
-    for fn in uploaded.keys():
-        print(f'User uploaded file "{fn}" with length {len(uploaded[fn])} bytes')
-        return fn, io.StringIO(uploaded[fn].decode('utf-8'))
-    return None, None
+@dataclass
+class SearchConfig:
+    data_path: Optional[str] = None
+    use_colab_upload: bool = False
+    train_ratio: float = 0.75
+    n_iter_search: int = 512
+    cv_splits: int = 5
+    n_estimators: int = 128
+    output_dir: Path = Path("output")
+    random_state: int = RANDOM_STATE
 
-
-def load_dataset(file_io, usecols):
-    """
-    Load the dataset from the uploaded file using the specified columns.
-    """
-    df = pd.read_csv(file_io, sep=',', usecols=usecols)
-    print("Dataset head:")
-    print(df.head())
+def load_data(config: SearchConfig) -> pd.DataFrame:
+    if config.use_colab_upload:
+        try:
+            from google.colab import files  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError(
+                "--colab fue especificado pero google.colab no está disponible."
+            ) from exc
+        uploaded = files.upload()
+        filename = next(iter(uploaded))
+        logger.info("Archivo subido: %s (%d bytes)", filename, len(uploaded[filename]))
+        df = pd.read_csv(io.StringIO(uploaded[filename].decode("utf-8")), sep=",", usecols=USE_COLUMNS)
+    else:
+        if config.data_path is None:
+            raise ValueError("Debes indicar --data-path o usar --colab.")
+        path = Path(config.data_path)
+        if not path.exists():
+            raise FileNotFoundError(f"No se encontró el archivo: {path}")
+        df = pd.read_csv(path, sep=",", usecols=USE_COLUMNS)
+        logger.info("Dataset cargado desde %s: %s filas x %s columnas", path, *df.shape)
     return df
 
-
-def split_dataset(df, train_ratio=0.75):
-    """
-    Split the dataset into training and testing sets.
-    """
+def split_dataset(df: pd.DataFrame, train_ratio: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     n_train = int(len(df) * train_ratio)
-    train = df.iloc[:n_train]
-    test = df.iloc[n_train:]
-    print("Training samples:", len(train))
-    print("Testing samples:", len(test))
+    train, test = df.iloc[:n_train].copy(), df.iloc[n_train:].copy()
+    logger.info("Train: %d filas | Test: %d filas", len(train), len(test))
     return train, test
 
-
-def report(results, n_top=3):
+def build_param_distributions() -> dict:
     """
-    Report the top n models from the hyperparameter search.
+    'auto' fue eliminado de max_features en scikit-learn >= 1.3; se
+    sustituye por 'sqrt'/'log2'/None y valores enteros explícitos.
     """
-    for i in range(1, n_top + 1):
-        candidates = np.flatnonzero(results['rank_test_score'] == i)
-        for candidate in candidates:
-            print("Model with rank:", i)
-            print("Mean validation score: {:.3f} (std: {:.3f})".format(
-                results['mean_test_score'][candidate],
-                results['std_test_score'][candidate]))
-            print("Parameters:", results['params'][candidate])
-            print("")
-
-
-def hyperparameter_search(x_train, y_train, n_iter_search=512):
-    """
-    Perform hyperparameter tuning using RandomizedSearchCV for a Random Forest classifier.
-    """
-    clf = RandomForestClassifier(n_jobs=-1)
-    param_grid = { 
-        'n_estimators': [128],
-        'max_features': ['auto', 'sqrt', 'log2', 7, 6, 5, 4, 3, 2, 1, None],
-        "max_depth": [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, None],
+    return {
+        "max_features": ["sqrt", "log2", None] + list(range(1, len(FEATURE_COLUMNS) + 1)),
+        "max_depth": list(range(2, 21)) + [None],
         "min_samples_split": sp_randint(2, 130),
         "min_samples_leaf": sp_randint(1, 130),
-        'bootstrap': [True, False],
-        'class_weight': ['balanced', None],
-        'criterion': ['gini', 'entropy'],
-        'n_jobs': [-1],
-        "random_state": [15],
-        "min_weight_fraction_leaf": [0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50],
-        "max_leaf_nodes": [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, None]
+        "bootstrap": [True, False],
+        "class_weight": ["balanced", "balanced_subsample", None],
+        "criterion": ["gini", "entropy"],
+        "min_weight_fraction_leaf": [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50],
+        "max_leaf_nodes": list(range(2, 21)) + [None],
     }
-    metrica = make_scorer(precision_score, greater_is_better=True, average="binary")
-    random_search = RandomizedSearchCV(clf, scoring=metrica, param_distributions=param_grid,
-                                       n_iter=n_iter_search, random_state=15)
-    random_search.fit(x_train, y_train)
-    print("Hyperparameter search results:")
-    report(random_search.cv_results_, n_top=3)
-    return random_search.best_params_
 
+def _log_top_results(cv_results: dict, n_top: int = 3) -> None:
+    for rank in range(1, n_top + 1):
+        candidates = np.flatnonzero(cv_results["rank_test_score"] == rank)
+        for candidate in candidates:
+            logger.info(
+                "Rank %d | score medio: %.3f (std %.3f) | params: %s",
+                rank,
+                cv_results["mean_test_score"][candidate],
+                cv_results["std_test_score"][candidate],
+                cv_results["params"][candidate],
+            )
 
-def main():
-    # Define the columns to use from the CSV file
-    usecols = ['CLASIFICADOR', '1', '31', '42', '46', '47', '48', '60', '68', '76', '77', 
-               '93', '171', '173', '191', '221', '225', '237', 'FECHA.month']
-    
-    # Upload dataset file
-    filename, file_io = upload_data()
-    if filename is None:
-        print("No file uploaded.")
-        return
-    
-    # Load dataset
-    df = load_dataset(file_io, usecols)
-    
-    # Split dataset into training and testing sets
-    train, test = split_dataset(df, train_ratio=0.75)
-    
-    # Define features and target (using training data for hyperparameter search)
-    features = df.columns[1:]
-    x_train = train[features]
-    y_train = train['CLASIFICADOR']
-    
-    # Perform hyperparameter search
-    best_params = hyperparameter_search(x_train, y_train, n_iter_search=512)
-    print("Best parameters found:")
-    print(best_params)
-    
-    
-if __name__ == '__main__':
+def hyperparameter_search(x_train: pd.DataFrame, y_train: pd.Series, config: SearchConfig) -> dict:
+    """
+    Búsqueda aleatoria optimizando precisión: se asume que una señal de
+    entrada errónea (falso positivo) es más costosa que una oportunidad
+    no aprovechada. Validación cruzada temporal (TimeSeriesSplit).
+    """
+    clf = RandomForestClassifier(
+        n_estimators=config.n_estimators, n_jobs=-1, random_state=config.random_state
+    )
+    scorer = make_scorer(precision_score, average="binary", zero_division=0)
+    cv = TimeSeriesSplit(n_splits=config.cv_splits)
+
+    search = RandomizedSearchCV(
+        estimator=clf,
+        param_distributions=build_param_distributions(),
+        n_iter=config.n_iter_search,
+        scoring=scorer,
+        cv=cv,
+        n_jobs=-1,
+        random_state=config.random_state,
+        verbose=1,
+    )
+    search.fit(x_train, y_train)
+    _log_top_results(search.cv_results_, n_top=3)
+    logger.info("Mejores hiperparámetros: %s", search.best_params_)
+    return search.best_params_
+
+def save_results(best_params: dict, output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / "best_hyperparameters.json", "w", encoding="utf-8") as fh:
+        json.dump(best_params, fh, indent=2, default=str)
+    logger.info("Hiperparámetros guardados en %s", output_dir / "best_hyperparameters.json")
+
+def parse_args() -> SearchConfig:
+    parser = argparse.ArgumentParser(description="Búsqueda de hiperparámetros para el Random Forest de SPY.")
+    parser.add_argument("--data-path", type=str, default=None)
+    parser.add_argument("--colab", action="store_true")
+    parser.add_argument("--train-ratio", type=float, default=0.75)
+    parser.add_argument("--n-iter", type=int, default=512)
+    parser.add_argument("--cv-splits", type=int, default=5)
+    parser.add_argument("--n-estimators", type=int, default=128)
+    parser.add_argument("--output-dir", type=str, default="output")
+    args = parser.parse_args()
+    return SearchConfig(
+        data_path=args.data_path,
+        use_colab_upload=args.colab,
+        train_ratio=args.train_ratio,
+        n_iter_search=args.n_iter,
+        cv_splits=args.cv_splits,
+        n_estimators=args.n_estimators,
+        output_dir=Path(args.output_dir),
+    )
+
+def main() -> None:
+    config = parse_args()
+    df = load_data(config)
+    train, _ = split_dataset(df, config.train_ratio)
+    x_train, y_train = train[FEATURE_COLUMNS], train[TARGET_COLUMN]
+    best_params = hyperparameter_search(x_train, y_train, config)
+    save_results(best_params, config.output_dir)
+
+if __name__ == "__main__":
     main()
