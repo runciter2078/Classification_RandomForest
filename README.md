@@ -102,10 +102,22 @@ python random_forest_hypertune.py --data-path path/to/data.csv
 
 The same `--colab`, `--train-ratio`, `--n-iter`, `--cv-splits` and `--output-dir` arguments are available; results are saved to `output/best_hyperparameters.json`.
 
+## Sample dataset
+
+A ready-to-use `SPYV3.csv` (5 years of daily SPY data with engineered technical indicators, generated 2026-08-13) is bundled in this repository so you can run the scripts above without depending on the original proprietary dataset. It was produced with `generate_spy_dataset.py`, which downloads real SPY data via `yfinance` and computes technical/categorical features under the same column names the scripts expect.
+
+To regenerate it with fresh data:
+
+```bash
+pip install yfinance
+python generate_spy_dataset.py --months 60 --output SPYV3.csv
+```
+
+Note: this is an independently engineered dataset, not a reconstruction of the original SPYV3.csv used when this project was first developed — see `generate_spy_dataset.py` for the exact feature definitions.
+
 ## Notes and limitations
 
 - Missing values are not imputed automatically; the pipeline logs a warning if any are found in the selected columns, and handling them beforehand is the user's responsibility.
-- The dataset is not included in this repository.
 - `RandomizedSearchCV` results are stochastic; increase `--n-iter` and keep `random_state` fixed for more stable and reproducible results.
 ## License
 
