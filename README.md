@@ -1,5 +1,11 @@
 # SPY Random Forest Classifier
 
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![scikit--learn](https://img.shields.io/badge/scikit--learn-%3E%3D1.3-orange)
+![pandas](https://img.shields.io/badge/pandas-%E2%9C%93-150458)
+![numpy](https://img.shields.io/badge/numpy-%E2%9C%93-013243)
+![License](https://img.shields.io/badge/license-GPL--3.0-green)
+
 A Random Forest pipeline for predicting positive entry days on the SPY ETF from a set of engineered numerical features. The project follows leakage-safe practices for financial time series: chronological train/test splitting and time-aware cross-validation during hyperparameter search.
 
 > Disclaimer: this project is for educational and research purposes only. It does not constitute financial or investment advice, and past predictive performance does not guarantee future results.
@@ -9,7 +15,7 @@ A Random Forest pipeline for predicting positive entry days on the SPY ETF from 
 - `spy_random_forest_classifier.py` — Full pipeline: data loading, chronological train/test split, hyperparameter search (RandomizedSearchCV + TimeSeriesSplit), final model training, evaluation (classification report, confusion matrix, ROC-AUC) and feature importance analysis (impurity-based and permutation-based).
 - `random_forest_hypertune.py` — Standalone hyperparameter search script, optimized for precision (minimizing false positive entry signals) over a wider search space.
 - `README.md` — This file.
-- `LICENSE` — Project license (MIT).
+- `LICENSE` — Project license (GPL-3.0).
 
 ## Methodology
 
@@ -101,7 +107,6 @@ The same `--colab`, `--train-ratio`, `--n-iter`, `--cv-splits` and `--output-dir
 - Missing values are not imputed automatically; the pipeline logs a warning if any are found in the selected columns, and handling them beforehand is the user's responsibility.
 - The dataset is not included in this repository.
 - `RandomizedSearchCV` results are stochastic; increase `--n-iter` and keep `random_state` fixed for more stable and reproducible results.
-
 ## License
 
-Distributed under the [MIT License](LICENSE).
+Distributed under the [GNU General Public License v3.0](LICENSE).
